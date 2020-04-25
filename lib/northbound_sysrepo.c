@@ -376,6 +376,7 @@ static int frr_sr_state_cb(const char *xpath, sr_val_t **values,
 			   size_t *values_cnt, uint64_t request_id,
 			   const char *original_xpath, void *private_ctx)
 {
+	struct nb_oper_data_iter_input iter_input = {};
 	struct list *elements;
 	struct yang_data *data;
 	struct listnode *node;
@@ -383,9 +384,11 @@ static int frr_sr_state_cb(const char *xpath, sr_val_t **values,
 	int ret, count, i = 0;
 
 	elements = yang_data_list_new();
-	if (nb_oper_data_iterate(xpath, NULL, NB_OPER_DATA_ITER_NORECURSE,
-				 frr_sr_state_data_iter_cb, elements)
-	    != NB_OK) {
+	iter_input.xpath = xpath;
+	iter_input.cb = frr_sr_state_data_iter_cb;
+	iter_input.cb_arg = elements;
+	iter_input.flags = F_NB_OPER_DATA_ITER_NORECURSE;
+	if (nb_oper_data_iterate(&iter_input) != NB_OK) {
 		flog_warn(EC_LIB_NB_OPERATIONAL_DATA,
 			  "%s: failed to obtain operational data [xpath %s]",
 			  __func__, xpath);
