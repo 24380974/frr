@@ -383,7 +383,6 @@ void access_list_filter_delete(struct access_list *access,
 			       struct filter *filter)
 {
 	struct access_master *master;
-	struct filter *replace = filter;
 
 	master = access->master;
 
@@ -522,8 +521,8 @@ struct filter *filter_lookup_zebra(struct access_list *access,
 	return NULL;
 }
 
-void config_write_access_zebra(struct vty *, struct filter *);
-void config_write_access_cisco(struct vty *, struct filter *);
+static void config_write_access_zebra(struct vty *, struct filter *);
+static void config_write_access_cisco(struct vty *, struct filter *);
 
 /* show access-list command. */
 static int filter_show(struct vty *vty, const char *name, afi_t afi)
