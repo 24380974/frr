@@ -103,6 +103,7 @@ lib_libfrr_la_SOURCES = \
 	lib/yang_wrappers.c \
 	lib/zclient.c \
 	lib/zlog.c \
+	lib/zlog_5424.c \
 	lib/zlog_targets.c \
 	lib/printf/printf-pos.c \
 	lib/printf/vfprintf.c \
@@ -155,6 +156,7 @@ clippy_scan += \
 	lib/plist.c \
 	lib/routemap_cli.c \
 	lib/vty.c \
+	lib/zlog_5424.c \
 	# end
 
 pkginclude_HEADERS += \

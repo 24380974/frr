@@ -34,6 +34,8 @@
 extern "C" {
 #endif
 
+DECLARE_MGROUP(LOG)
+
 extern char zlog_prefix[];
 extern size_t zlog_prefixsz;
 extern int zlog_tmpdirfd;
