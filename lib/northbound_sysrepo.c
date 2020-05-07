@@ -368,7 +368,7 @@ static int frr_sr_state_data_iter_cb(const struct lys_node *snode,
 
 	listnode_add(elements, data);
 
-	return NB_OK;
+	return NB_ITER_CONTINUE;
 }
 
 /* Callback for state retrieval. */
@@ -377,6 +377,7 @@ static int frr_sr_state_cb(const char *xpath, sr_val_t **values,
 			   const char *original_xpath, void *private_ctx)
 {
 	struct nb_oper_data_iter_input iter_input = {};
+	struct nb_oper_data_iter_output iter_output = {};
 	struct list *elements;
 	struct yang_data *data;
 	struct listnode *node;
@@ -388,7 +389,7 @@ static int frr_sr_state_cb(const char *xpath, sr_val_t **values,
 	iter_input.cb = frr_sr_state_data_iter_cb;
 	iter_input.cb_arg = elements;
 	iter_input.flags = F_NB_OPER_DATA_ITER_NORECURSE;
-	if (nb_oper_data_iterate(&iter_input) != NB_OK) {
+	if (nb_oper_data_iterate(&iter_input, &iter_output) == NB_ITER_ABORT) {
 		flog_warn(EC_LIB_NB_OPERATIONAL_DATA,
 			  "%s: failed to obtain operational data [xpath %s]",
 			  __func__, xpath);
