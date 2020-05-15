@@ -1365,8 +1365,7 @@ DEFPY (show_yang_operational_data,
 	lyd_validate(&dnode, LYD_OPT_GET, ly_ctx);
 
 	/* Display the data. */
-	if (lyd_print_mem(&strp, dnode, format,
-			  LYP_FORMAT | LYP_WITHSIBLINGS | LYP_WD_ALL)
+	if (lyd_print_mem(&strp, dnode, format, LYP_FORMAT | LYP_WD_EXPLICIT)
 		    != 0
 	    || !strp) {
 		vty_out(vty, "%% Failed to display operational data.\n");
