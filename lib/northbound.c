@@ -80,7 +80,6 @@ static int nb_oper_data_iter_node(struct nb_oper_data_iter_input *input,
 				  const struct lys_node *snode,
 				  const char *xpath,
 				  const void *parent_list_entry,
-				  const struct yang_list_keys *parent_list_keys,
 				  const void *list_entry,
 				  const char *offset_node, bool first);
 
@@ -1268,7 +1267,6 @@ static int nb_oper_data_iter_children(struct nb_oper_data_iter_input *input,
 				      struct nb_oper_data_iter_output *output,
 				      const struct lys_node *snode,
 				      const char *xpath, const void *list_entry,
-				      const struct yang_list_keys *list_keys,
 				      const char *offset_node, bool first)
 {
 	struct lys_node *child;
@@ -1284,8 +1282,8 @@ static int nb_oper_data_iter_children(struct nb_oper_data_iter_input *input,
 		}
 
 		ret = nb_oper_data_iter_node(input, output, child, xpath,
-					     list_entry, list_keys, NULL,
-					     offset_node, false);
+					     list_entry, NULL, offset_node,
+					     false);
 		if (ret != NB_ITER_CONTINUE)
 			return ret;
 	}
@@ -1296,8 +1294,7 @@ static int nb_oper_data_iter_children(struct nb_oper_data_iter_input *input,
 static int nb_oper_data_iter_leaf(struct nb_oper_data_iter_input *input,
 				  struct nb_oper_data_iter_output *output,
 				  const struct lys_node *snode,
-				  const char *xpath, const void *list_entry,
-				  const struct yang_list_keys *list_keys)
+				  const char *xpath, const void *list_entry)
 {
 	const struct nb_node *nb_node = snode->priv;
 	struct yang_data *data;
@@ -1326,7 +1323,6 @@ static int nb_oper_data_iter_container(struct nb_oper_data_iter_input *input,
 				       const struct lys_node *snode,
 				       const char *xpath,
 				       const void *list_entry,
-				       const struct yang_list_keys *list_keys,
 				       const char *offset_node)
 {
 	const struct nb_node *nb_node = snode->priv;
@@ -1354,16 +1350,14 @@ static int nb_oper_data_iter_container(struct nb_oper_data_iter_input *input,
 
 	/* Iterate over the child nodes. */
 	return nb_oper_data_iter_children(input, output, snode, xpath,
-					  list_entry, list_keys, offset_node,
-					  false);
+					  list_entry, offset_node, false);
 }
 
-static int
-nb_oper_data_iter_leaflist(struct nb_oper_data_iter_input *input,
-			   struct nb_oper_data_iter_output *output,
-			   const struct lys_node *snode, const char *xpath,
-			   const void *parent_list_entry,
-			   const struct yang_list_keys *parent_list_keys)
+static int nb_oper_data_iter_leaflist(struct nb_oper_data_iter_input *input,
+				      struct nb_oper_data_iter_output *output,
+				      const struct lys_node *snode,
+				      const char *xpath,
+				      const void *parent_list_entry)
 {
 	const struct nb_node *nb_node = snode->priv;
 	const void *list_entry = NULL;
@@ -1401,7 +1395,6 @@ static int nb_oper_data_iter_list(struct nb_oper_data_iter_input *input,
 				  const struct lys_node *snode,
 				  const char *xpath_list,
 				  const void *parent_list_entry,
-				  const struct yang_list_keys *parent_list_keys,
 				  const void *list_entry)
 {
 	const struct nb_node *nb_node = snode->priv;
@@ -1454,8 +1447,7 @@ static int nb_oper_data_iter_list(struct nb_oper_data_iter_input *input,
 
 		/* Iterate over the child nodes. */
 		ret = nb_oper_data_iter_children(input, output, snode, xpath,
-						 list_entry, &list_keys, NULL,
-						 false);
+						 list_entry, NULL, false);
 		if (ret != NB_ITER_CONTINUE)
 			return ret;
 	} while (list_entry);
@@ -1468,7 +1460,6 @@ static int nb_oper_data_iter_node(struct nb_oper_data_iter_input *input,
 				  const struct lys_node *snode,
 				  const char *xpath_parent,
 				  const void *parent_list_entry,
-				  const struct yang_list_keys *parent_list_keys,
 				  const void *list_entry,
 				  const char *offset_node, bool first)
 {
@@ -1518,29 +1509,26 @@ static int nb_oper_data_iter_node(struct nb_oper_data_iter_input *input,
 
 	switch (snode->nodetype) {
 	case LYS_CONTAINER:
-		ret = nb_oper_data_iter_container(
-			input, output, snode, xpath, parent_list_entry,
-			parent_list_keys, offset_node);
+		ret = nb_oper_data_iter_container(input, output, snode, xpath,
+						  parent_list_entry,
+						  offset_node);
 		break;
 	case LYS_LEAF:
 		ret = nb_oper_data_iter_leaf(input, output, snode, xpath,
-					     parent_list_entry,
-					     parent_list_keys);
+					     parent_list_entry);
 		break;
 	case LYS_LEAFLIST:
 		ret = nb_oper_data_iter_leaflist(input, output, snode, xpath,
-						 parent_list_entry,
-						 parent_list_keys);
+						 parent_list_entry);
 		break;
 	case LYS_LIST:
 		ret = nb_oper_data_iter_list(input, output, snode, xpath,
-					     parent_list_entry,
-					     parent_list_keys, list_entry);
+					     parent_list_entry, list_entry);
 		break;
 	case LYS_USES:
-		ret = nb_oper_data_iter_children(
-			input, output, snode, xpath, parent_list_entry,
-			parent_list_keys, offset_node, true);
+		ret = nb_oper_data_iter_children(input, output, snode, xpath,
+						 parent_list_entry, offset_node,
+						 true);
 		break;
 	default:
 		break;
@@ -1549,11 +1537,11 @@ static int nb_oper_data_iter_node(struct nb_oper_data_iter_input *input,
 	return ret;
 }
 
-static int nb_oper_data_lookup_list_entry(
-	struct nb_oper_data_iter_output *output, struct lyd_node *dnode,
-	const void **parent_list_entry, struct yang_list_keys *parent_list_keys,
-	const void **list_entry, struct yang_list_keys *list_keys,
-	bool exact_match)
+static int
+nb_oper_data_lookup_list_entry(struct nb_oper_data_iter_output *output,
+			       struct lyd_node *dnode,
+			       const void **parent_list_entry,
+			       const void **list_entry, bool exact_match)
 {
 	struct list *list_dnodes;
 	struct listnode *ln;
@@ -1573,26 +1561,26 @@ static int nb_oper_data_lookup_list_entry(
 	 * to the given XPath.
 	 */
 	for (ALL_LIST_ELEMENTS_RO(list_dnodes, ln, dn)) {
+		struct yang_list_keys list_keys;
 		struct lyd_node *child;
 		struct nb_node *nn;
 		unsigned int n = 0;
 
 		*parent_list_entry = *list_entry;
-		*parent_list_keys = *list_keys;
 
 		/* Obtain the list entry keys. */
-		memset(list_keys, 0, sizeof(*list_keys));
+		memset(&list_keys, 0, sizeof(list_keys));
 		LY_TREE_FOR (dn->child, child) {
 			if (!lys_is_key((struct lys_node_leaf *)child->schema,
 					NULL))
 				continue;
-			strlcpy(list_keys->key[n],
+			strlcpy(list_keys.key[n],
 				yang_dnode_get_string(child, NULL),
-				sizeof(list_keys->key[n]));
+				sizeof(list_keys.key[n]));
 			n++;
 		}
-		list_keys->num = n;
-		if (list_keys->num
+		list_keys.num = n;
+		if (list_keys.num
 		    != ((struct lys_node_list *)dn->schema)->keys_size) {
 			char xpath[XPATH_MAXLEN];
 
@@ -1608,11 +1596,12 @@ static int nb_oper_data_lookup_list_entry(
 		/* Find the list entry pointer. */
 		nn = dn->schema->priv;
 		*list_entry = nb_callback_lookup_entry(nn, *parent_list_entry,
-						       list_keys, exact_match);
+						       &list_keys, exact_match);
 		if (*list_entry == NULL) {
 			list_delete(&list_dnodes);
 			return NB_ITER_CONTINUE;
 		}
+		lyd_set_private(dn, (void *)*list_entry);
 	}
 
 	list_delete(&list_dnodes);
@@ -1620,12 +1609,12 @@ static int nb_oper_data_lookup_list_entry(
 	return NB_ITER_CONTINUE;
 }
 
-static int nb_oper_data_iterate_without_offset(
-	struct nb_oper_data_iter_input *input,
-	struct nb_oper_data_iter_output *output, const char *xpath,
-	struct lyd_node *dnode, const void *parent_list_entry,
-	struct yang_list_keys *parent_list_keys, const void *list_entry,
-	struct yang_list_keys *list_keys)
+static int
+nb_oper_data_iterate_without_offset(struct nb_oper_data_iter_input *input,
+				    struct nb_oper_data_iter_output *output,
+				    const char *xpath, struct lyd_node *dnode,
+				    const void *parent_list_entry,
+				    const void *list_entry)
 {
 	struct lys_node *snode = dnode->schema;
 	int ret;
@@ -1633,22 +1622,20 @@ static int nb_oper_data_iterate_without_offset(
 	/* If a list entry was given, iterate over that list entry only. */
 	if (dnode->schema->nodetype == LYS_LIST)
 		ret = nb_oper_data_iter_children(input, output, snode, xpath,
-						 list_entry, list_keys, NULL,
-						 true);
+						 list_entry, NULL, true);
 	else
 		ret = nb_oper_data_iter_node(input, output, snode, xpath,
-					     list_entry, list_keys, NULL, NULL,
-					     true);
+					     list_entry, NULL, NULL, true);
 
 	return ret;
 }
 
-static int nb_oper_data_iterate_with_offset(
-	struct nb_oper_data_iter_input *input,
-	struct nb_oper_data_iter_output *output, const char *xpath,
-	struct lyd_node *dnode, const void *parent_list_entry,
-	struct yang_list_keys *parent_list_keys, const void *list_entry,
-	struct yang_list_keys *list_keys)
+static int
+nb_oper_data_iterate_with_offset(struct nb_oper_data_iter_input *input,
+				 struct nb_oper_data_iter_output *output,
+				 const char *xpath, struct lyd_node *dnode,
+				 const void *parent_list_entry,
+				 const void *list_entry)
 {
 	struct lys_node *snode = dnode->schema, *snode_sibling;
 	struct lyd_node *dnode_req;
@@ -1659,20 +1646,20 @@ static int nb_oper_data_iterate_with_offset(
 		char xpath_list[XPATH_MAXLEN];
 
 		ret = nb_oper_data_iter_children(input, output, snode, xpath,
-						 list_entry, list_keys,
-						 input->offset_node, true);
+						 list_entry, input->offset_node,
+						 true);
 		if (ret != NB_ITER_CONTINUE)
 			return ret;
 
 		/* Iterate over remaining list entries. */
 		yang_dnode_get_path(dnode->parent, xpath_list,
 				    sizeof(xpath_list));
-		ret = nb_oper_data_iter_node(
-			input, output, snode, xpath_list, parent_list_entry,
-			parent_list_keys, list_entry, NULL, false);
+		ret = nb_oper_data_iter_node(input, output, snode, xpath_list,
+					     parent_list_entry, list_entry,
+					     NULL, false);
 	} else
 		ret = nb_oper_data_iter_node(input, output, snode, xpath,
-					     list_entry, list_keys, NULL,
+					     list_entry, NULL,
 					     input->offset_node, true);
 	if (ret != NB_ITER_CONTINUE)
 		return ret;
@@ -1685,8 +1672,8 @@ static int nb_oper_data_iterate_with_offset(
 				    sizeof(xpath_parent));
 
 		ret = nb_oper_data_iter_node(input, output, snode_sibling,
-					     xpath_parent, list_entry,
-					     list_keys, NULL, NULL, false);
+					     xpath_parent, list_entry, NULL,
+					     NULL, false);
 		if (ret != NB_ITER_CONTINUE)
 			return ret;
 	}
@@ -1706,12 +1693,20 @@ static int nb_oper_data_iterate_with_offset(
 		if (dnode_parent == dnode_req)
 			break;
 
-		/* Update list pointers and keys. */
-		ret = nb_oper_data_lookup_list_entry(
-			output, dnode_parent, &parent_list_entry,
-			parent_list_keys, &list_entry, list_keys, true);
-		if (ret != NB_ITER_CONTINUE || list_entry == NULL)
-			return ret;
+		/* Update list pointers. */
+		list_entry = NULL;
+		parent_list_entry = NULL;
+		for (struct lyd_node *dnode_iter = dnode_parent; dnode_iter;
+		     dnode_iter = dnode_iter->parent) {
+			if (dnode_iter->schema->nodetype != LYS_LIST)
+				continue;
+			if (!list_entry) {
+				list_entry = dnode_iter->priv;
+				continue;
+			}
+			parent_list_entry = dnode_iter->priv;
+			break;
+		}
 
 		yang_dnode_get_path(dnode_parent->parent, xpath_parent,
 				    sizeof(xpath_parent));
@@ -1720,8 +1715,7 @@ static int nb_oper_data_iterate_with_offset(
 		if (snode_parent->nodetype == LYS_LIST) {
 			ret = nb_oper_data_iter_node(
 				input, output, snode_parent, xpath_parent,
-				parent_list_entry, parent_list_keys, list_entry,
-				NULL, false);
+				parent_list_entry, list_entry, NULL, false);
 			if (ret != NB_ITER_CONTINUE)
 				return ret;
 		}
@@ -1730,7 +1724,7 @@ static int nb_oper_data_iterate_with_offset(
 		LY_TREE_FOR (snode_parent->next, snode_sibling) {
 			ret = nb_oper_data_iter_node(
 				input, output, snode_sibling, xpath_parent,
-				list_entry, list_keys, NULL, NULL, false);
+				list_entry, NULL, NULL, false);
 			if (ret != NB_ITER_CONTINUE)
 				return ret;
 		}
@@ -1769,7 +1763,6 @@ int nb_oper_data_iterate(struct nb_oper_data_iter_input *input,
 	const char *xpath;
 	struct lyd_node *dnode;
 	const void *parent_list_entry = NULL, *list_entry = NULL;
-	struct yang_list_keys parent_list_keys, list_keys;
 	bool exact_match;
 	int ret;
 
@@ -1803,20 +1796,19 @@ int nb_oper_data_iterate(struct nb_oper_data_iter_input *input,
 		return NB_ITER_ABORT;
 	}
 	ret = nb_oper_data_lookup_list_entry(output, dnode, &parent_list_entry,
-					     &parent_list_keys, &list_entry,
-					     &list_keys, exact_match);
+					     &list_entry, exact_match);
 	if (ret != NB_ITER_CONTINUE || list_entry == NULL)
 		goto exit;
 
 	/* Start iteration. */
 	if (CHECK_FLAG(input->flags, F_NB_OPER_DATA_ITER_OFFSET))
-		ret = nb_oper_data_iterate_with_offset(
-			input, output, xpath, dnode, parent_list_entry,
-			&parent_list_keys, list_entry, &list_keys);
+		ret = nb_oper_data_iterate_with_offset(input, output, xpath,
+						       dnode, parent_list_entry,
+						       list_entry);
 	else
 		ret = nb_oper_data_iterate_without_offset(
 			input, output, xpath, dnode, parent_list_entry,
-			&parent_list_keys, list_entry, &list_keys);
+			list_entry);
 
 exit:
 	/* Log how the iteration went. */
