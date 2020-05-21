@@ -75,13 +75,12 @@ static void nb_transaction_free(struct nb_transaction *transaction);
 static int nb_transaction_process(enum nb_event event,
 				  struct nb_transaction *transaction);
 static void nb_transaction_apply_finish(struct nb_transaction *transaction);
-static int nb_oper_data_iter_node(struct nb_oper_data_iter_input *input,
-				  struct nb_oper_data_iter_output *output,
-				  const struct lys_node *snode,
-				  const char *xpath,
-				  const void *parent_list_entry,
-				  const void *list_entry,
-				  const char *offset_node, bool first);
+static int
+nb_oper_data_iter_node(struct nb_oper_data_iter_input *input,
+		       struct nb_oper_data_iter_output *output,
+		       const struct lys_node *snode, const char *xpath,
+		       const void *parent_list_entry, const void *list_entry,
+		       const struct lys_node **offset_node, bool first);
 
 static int nb_node_check_config_only(const struct lys_node *snode, void *arg)
 {
@@ -1287,7 +1286,7 @@ static int nb_oper_data_iter_children(struct nb_oper_data_iter_input *input,
 				      struct nb_oper_data_iter_output *output,
 				      const struct lys_node *snode,
 				      const char *xpath, const void *list_entry,
-				      const char *offset_node)
+				      const struct lys_node **offset_node)
 {
 	struct lys_node *child;
 
@@ -1295,10 +1294,11 @@ static int nb_oper_data_iter_children(struct nb_oper_data_iter_input *input,
 		int ret;
 
 		/* Handle node offset. */
-		if (offset_node && child->nodetype != LYS_USES) {
-			if (!strmatch(offset_node, child->name))
+		if (offset_node && *offset_node
+		    && child->nodetype != LYS_USES) {
+			if (*offset_node != child)
 				continue;
-			offset_node = NULL;
+			*offset_node = NULL;
 		}
 
 		ret = nb_oper_data_iter_node(input, output, child, xpath,
@@ -1307,6 +1307,10 @@ static int nb_oper_data_iter_children(struct nb_oper_data_iter_input *input,
 		if (ret != NB_ITER_CONTINUE)
 			return ret;
 	}
+
+	/* Check if all requested data was iterated over already. */
+	if (strmatch(input->xpath, xpath))
+		return NB_ITER_FINISH;
 
 	return NB_ITER_CONTINUE;
 }
@@ -1348,7 +1352,7 @@ static int nb_oper_data_iter_container(struct nb_oper_data_iter_input *input,
 				       const struct lys_node *snode,
 				       const char *xpath,
 				       const void *list_entry,
-				       const char *offset_node)
+				       const struct lys_node **offset_node)
 {
 	const struct nb_node *nb_node = snode->priv;
 
@@ -1485,13 +1489,12 @@ static int nb_oper_data_iter_list(struct nb_oper_data_iter_input *input,
 	return NB_ITER_CONTINUE;
 }
 
-static int nb_oper_data_iter_node(struct nb_oper_data_iter_input *input,
-				  struct nb_oper_data_iter_output *output,
-				  const struct lys_node *snode,
-				  const char *xpath_parent,
-				  const void *parent_list_entry,
-				  const void *list_entry,
-				  const char *offset_node, bool first)
+static int
+nb_oper_data_iter_node(struct nb_oper_data_iter_input *input,
+		       struct nb_oper_data_iter_output *output,
+		       const struct lys_node *snode, const char *xpath_parent,
+		       const void *parent_list_entry, const void *list_entry,
+		       const struct lys_node **offset_node, bool first)
 {
 	char xpath[XPATH_MAXLEN];
 	int ret = NB_ITER_CONTINUE;
@@ -1627,35 +1630,15 @@ static int nb_oper_data_lookup_list_entry(
 	return NB_ITER_CONTINUE;
 }
 
-static int
-nb_oper_data_iterate_without_offset(struct nb_oper_data_iter_input *input,
-				    struct nb_oper_data_iter_output *output,
-				    const char *xpath, struct lyd_node *dnode,
-				    const void *parent_list_entry,
-				    const void *list_entry)
-{
-	struct lys_node *snode = dnode->schema;
-	int ret;
-
-	/* If a list entry was given, iterate over that list entry only. */
-	if (dnode->schema->nodetype == LYS_LIST)
-		ret = nb_oper_data_iter_children(input, output, snode, xpath,
-						 list_entry, NULL);
-	else
-		ret = nb_oper_data_iter_node(input, output, snode, xpath,
-					     list_entry, NULL, NULL, true);
-
-	return ret;
-}
-
-static int nb_oper_data_iterate_with_offset(
-	struct nb_oper_data_iter_input *input,
-	struct nb_oper_data_iter_output *output, const char *xpath,
-	const char *offset_node, struct lyd_node *dnode,
-	const void *parent_list_entry, const void *list_entry)
+static int nb_oper_data_iterate_begin(struct nb_oper_data_iter_input *input,
+				      struct nb_oper_data_iter_output *output,
+				      const char *xpath,
+				      const struct lys_node **offset_node,
+				      struct lyd_node *dnode,
+				      const void *parent_list_entry,
+				      const void *list_entry)
 {
 	struct lys_node *snode = dnode->schema, *snode_sibling;
-	struct lyd_node *dnode_req;
 	int ret;
 
 	/* If a list entry was given, iterate over that list entry. */
@@ -1695,19 +1678,16 @@ static int nb_oper_data_iterate_with_offset(
 	}
 
 	/* Iterate over parents and their siblings. */
-	dnode_req = yang_dnode_get(dnode, input->xpath);
-	assert(dnode_req);
 	for (struct lyd_node *dnode_parent = dnode->parent; dnode_parent;
 	     dnode_parent = dnode_parent->parent) {
 		struct lys_node *snode_parent = dnode_parent->schema;
 		char xpath_parent[XPATH_MAXLEN];
 
-		/*
-		 * Break out of the loop if all requested data was iterated
-		 * over already.
-		 */
-		if (dnode_parent == dnode_req)
-			break;
+		/* Finish the iteration once we reach the module root. */
+		if (!dnode_parent->parent)
+			return NB_ITER_FINISH;
+		yang_dnode_get_path(dnode_parent->parent, xpath_parent,
+				    sizeof(xpath_parent));
 
 		/* Update list pointers. */
 		list_entry = NULL;
@@ -1723,9 +1703,6 @@ static int nb_oper_data_iterate_with_offset(
 			parent_list_entry = dnode_iter->priv;
 			break;
 		}
-
-		yang_dnode_get_path(dnode_parent->parent, xpath_parent,
-				    sizeof(xpath_parent));
 
 		/* For lists, iterate over remaining entries. */
 		if (snode_parent->nodetype == LYS_LIST) {
@@ -1751,7 +1728,8 @@ static int nb_oper_data_iterate_with_offset(
 
 static int
 nb_oper_data_iterate_validate_input(struct nb_oper_data_iter_input *input,
-				    struct nb_oper_data_iter_output *output)
+				    struct nb_oper_data_iter_output *output,
+				    const struct lys_node **offset_node)
 {
 	struct nb_node *nb_node;
 
@@ -1770,15 +1748,25 @@ nb_oper_data_iterate_validate_input(struct nb_oper_data_iter_input *input,
 		return NB_ITER_ABORT;
 	}
 
+	if (CHECK_FLAG(input->flags, F_NB_OPER_DATA_ITER_OFFSET)) {
+		nb_node = nb_node_find(input->offset_path);
+		if (!nb_node) {
+			snprintf(output->errmsg, sizeof(output->errmsg),
+				 "unknown offset path");
+			return NB_ITER_ABORT;
+		}
+		*offset_node = nb_node->snode;
+	}
+
 	return NB_ITER_CONTINUE;
 }
 
 int nb_oper_data_iterate(struct nb_oper_data_iter_input *input,
 			 struct nb_oper_data_iter_output *output)
 {
-	const char *xpath;
+	const char *xpath = NULL;
 	char xpath_base[XPATH_MAXLEN];
-	char *offset_node;
+	const struct lys_node *offset_node = NULL;
 	struct lyd_node *dnode;
 	const void *parent_list_entry = NULL, *list_entry = NULL;
 	bool exact_match;
@@ -1789,13 +1777,13 @@ int nb_oper_data_iterate(struct nb_oper_data_iter_input *input,
 	memset(output, 0, sizeof(*output));
 
 	/* Validate input parameters. */
-	ret = nb_oper_data_iterate_validate_input(input, output);
+	ret = nb_oper_data_iterate_validate_input(input, output, &offset_node);
 	if (ret != NB_ITER_CONTINUE)
 		return ret;
 
 	/* Get iteration starting point. */
 	if (CHECK_FLAG(input->flags, F_NB_OPER_DATA_ITER_OFFSET)) {
-		/* Split the offset base path from the offset node. */
+		/* Strip the offset node from the offset base path */
 		strlcpy(xpath_base, input->offset_path, sizeof(xpath_base));
 		for (size_t p = strlen(xpath_base); p; --p) {
 			if (xpath_base[p - 1] != '/')
@@ -1803,13 +1791,12 @@ int nb_oper_data_iterate(struct nb_oper_data_iter_input *input,
 
 			xpath_base[p - 1] = '\0';
 			xpath = xpath_base;
-			offset_node = &xpath_base[p];
 			break;
 		}
+		assert(xpath);
 		exact_match = false;
 	} else {
 		xpath = input->xpath;
-		offset_node = NULL;
 		exact_match = true;
 	}
 
@@ -1832,20 +1819,14 @@ int nb_oper_data_iterate(struct nb_oper_data_iter_input *input,
 		goto exit;
 
 	/* Start iteration. */
-	if (CHECK_FLAG(input->flags, F_NB_OPER_DATA_ITER_OFFSET))
-		ret = nb_oper_data_iterate_with_offset(
-			input, output, xpath, offset_node, dnode,
-			parent_list_entry, list_entry);
-	else
-		ret = nb_oper_data_iterate_without_offset(
-			input, output, xpath, dnode, parent_list_entry,
-			list_entry);
+	ret = nb_oper_data_iterate_begin(input, output, xpath, &offset_node,
+					 dnode, parent_list_entry, list_entry);
 
 exit:
 	/* Log how the iteration went. */
 	if (DEBUG_MODE_CHECK(&nb_dbg_cbs_state, DEBUG_MODE_ALL)) {
 		switch (ret) {
-		case NB_ITER_CONTINUE:
+		case NB_ITER_FINISH:
 			zlog_debug(
 				"finished operational-data iteration (fetched %u elements)",
 				output->num_elements);
@@ -1859,6 +1840,8 @@ exit:
 			zlog_debug(
 				"aborting operational-data iteration (fetched %u elements)",
 				output->num_elements);
+			break;
+		default:
 			break;
 		}
 	}

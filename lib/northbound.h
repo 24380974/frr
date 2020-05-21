@@ -582,6 +582,7 @@ struct nb_transaction {
 /* Return values of the 'nb_oper_data_cb' callback. */
 #define NB_ITER_CONTINUE 0
 #define NB_ITER_STOP 1
+#define NB_ITER_FINISH 2
 #define NB_ITER_ABORT -1
 
 /* Callback function used by nb_oper_data_iterate(). */
