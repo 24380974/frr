@@ -39,7 +39,7 @@ extern void router_id_del_address(struct connected *);
 extern void router_id_init(struct zebra_vrf *);
 extern void router_id_cmd_init(void);
 extern void router_id_write(struct vty *);
-extern void router_id_get(struct prefix *, vrf_id_t);
+extern int router_id_get(afi_t afi, struct prefix *, vrf_id_t);
 
 #ifdef __cplusplus
 }

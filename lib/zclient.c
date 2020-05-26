@@ -427,7 +427,7 @@ void zclient_send_reg_requests(struct zclient *zclient, vrf_id_t vrf_id)
 			   vrf_id);
 
 	/* We need router-id information. */
-	zebra_message_send(zclient, ZEBRA_ROUTER_ID_ADD, vrf_id);
+	zclient_send_router_id_add(zclient, AFI_IP, vrf_id);
 
 	/* We need interface information. */
 	zebra_message_send(zclient, ZEBRA_INTERFACE_ADD, vrf_id);
@@ -543,6 +543,17 @@ void zclient_send_dereg_requests(struct zclient *zclient, vrf_id_t vrf_id)
 				ZEBRA_REDISTRIBUTE_DEFAULT_DELETE, zclient, afi,
 				vrf_id);
 	}
+}
+
+int zclient_send_router_id_add(struct zclient *zclient, afi_t afi,
+			       vrf_id_t vrf_id)
+{
+	struct stream *s = zclient->obuf;
+	stream_reset(s);
+	zclient_create_header(s, ZEBRA_ROUTER_ID_ADD, vrf_id);
+	stream_putw(s, afi);
+	stream_putw_at(s, 0, stream_get_endp(s));
+	return zclient_send_message(zclient);
 }
 
 /* Send request to zebra daemon to start or stop RA. */

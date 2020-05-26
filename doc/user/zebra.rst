@@ -915,4 +915,3 @@ zebra Terminal Mode Commands
 .. clicmd:: show nexthop-group [ID] [vrf NAME] [ip|ipv6]
 
    Display nexthop groups created by zebra.
-
