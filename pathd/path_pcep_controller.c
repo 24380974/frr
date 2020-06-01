@@ -191,6 +191,7 @@ int pcep_ctrl_initialize(struct thread_master *main_thread,
 	ctrl_state->pcc_count = 0;
 	ctrl_state->pcc_opts =
 		XCALLOC(MTYPE_PCEP, sizeof(*ctrl_state->pcc_opts));
+	memset(ctrl_state->pcc, 0, sizeof(ctrl_state->pcc[0]) * MAX_PCC);
 	/* Default to no PCC address defined */
 	UNSET_FLAG(ctrl_state->pcc_opts->flags, F_PCC_OPTS_IPV4);
 	UNSET_FLAG(ctrl_state->pcc_opts->flags, F_PCC_OPTS_IPV6);
@@ -659,6 +660,10 @@ int pcep_thread_event_update_pce_options(struct ctrl_state *ctrl_state,
 		set_pcc_state(ctrl_state, pcc_state);
 	} else {
 		pcc_state = get_pcc_state(ctrl_state, pcc_id);
+		if (!pcc_state){
+		pcc_state = pcep_pcc_initialize(ctrl_state, pcc_id);
+		set_pcc_state(ctrl_state, pcc_state);
+		}
 	}
 
 	/* Copy the pcc options to delegate it to the update function */
@@ -677,11 +682,9 @@ int pcep_thread_event_remove_pcc(struct ctrl_state *ctrl_state, int pcc_id)
 {
 	struct pcc_state *pcc_state;
 
-	if (pcc_id <= ctrl_state->pcc_count) {
 		pcc_state = get_pcc_state(ctrl_state, pcc_id);
 		remove_pcc_state(ctrl_state, pcc_state);
 		pcep_pcc_finalize(ctrl_state, pcc_state);
-	}
 
 	return 0;
 }
@@ -753,7 +756,22 @@ int pcep_main_event_handler(struct thread *thread)
 
 
 /* ------------ Helper functions ------------ */
+int pcep_ctrl_get_free_pcc_id(struct frr_pthread *fpt)
+{
+	struct ctrl_state *ctrl_state = get_ctrl_state(fpt);
+	if(ctrl_state->pcc_count==0){
+		return 1;
+	}
 
+	for (int pcc_id = 0; pcc_id < MAX_PCC; pcc_id++) {
+		if (ctrl_state->pcc[pcc_id]==NULL){
+			zlog_debug("new pcc_id (%d)", pcc_id + 1);
+			return pcc_id+1;
+		}
+	}
+
+return 0;
+}
 void set_ctrl_state(struct frr_pthread *fpt, struct ctrl_state *ctrl_state)
 {
 	assert(fpt != NULL);
@@ -771,16 +789,32 @@ struct ctrl_state *get_ctrl_state(struct frr_pthread *fpt)
 	return ctrl_state;
 }
 
+int get_pcc_id_by_ip(struct frr_pthread *fpt, struct ipaddr *pce_ip)
+{
+	struct ctrl_state *ctrl_state = get_ctrl_state(fpt);
+	for (int pcc_id = 0; pcc_id < MAX_PCC; pcc_id++) {
+		if (ctrl_state->pcc[pcc_id]) {
+			if (ipaddr_cmp((const struct ipaddr *)&ctrl_state
+					       ->pcc[pcc_id]
+					       ->pce_opts->addr,
+				       (const struct ipaddr *)pce_ip)
+			    == 0) {
+				zlog_debug("found pcc_id (%d)", pcc_id + 1);
+				return pcc_id + 1;
+			}
+		}
+	}
+return 0;
+}
+
 struct pcc_state *get_pcc_state(struct ctrl_state *ctrl_state, int pcc_id)
 {
 	assert(ctrl_state != NULL);
 	assert(pcc_id >= 0);
 	assert(pcc_id <= MAX_PCC);
-	assert(pcc_id <= ctrl_state->pcc_count);
 
 	struct pcc_state *pcc_state;
 	pcc_state = ctrl_state->pcc[pcc_id - 1];
-	assert(pcc_state != NULL);
 	return pcc_state;
 }
 
@@ -789,11 +823,10 @@ void set_pcc_state(struct ctrl_state *ctrl_state, struct pcc_state *pcc_state)
 	assert(ctrl_state != NULL);
 	assert(pcc_state->id >= 0);
 	assert(pcc_state->id <= MAX_PCC);
-	assert(pcc_state->id > ctrl_state->pcc_count);
-	assert(ctrl_state->pcc[pcc_state->id - 1] == NULL);
 
 	ctrl_state->pcc[pcc_state->id - 1] = pcc_state;
-	ctrl_state->pcc_count = pcc_state->id;
+	ctrl_state->pcc_count++;
+	zlog_debug("added pce pcc_id (%d)", pcc_state->id);
 }
 
 void remove_pcc_state(struct ctrl_state *ctrl_state,
@@ -804,11 +837,11 @@ void remove_pcc_state(struct ctrl_state *ctrl_state,
 	assert(pcc_state->id <= MAX_PCC);
 	/* FIXME: Can only remove the last PCC for now,
 	 * we have only one anyway */
-	assert(pcc_state->id == ctrl_state->pcc_count);
-	assert(ctrl_state->pcc[pcc_state->id - 1] != NULL);
+	// assert(ctrl_state->pcc[pcc_state->id - 1] != NULL);
 
 	ctrl_state->pcc[pcc_state->id - 1] = NULL;
 	ctrl_state->pcc_count--;
+	zlog_debug("removed pce pcc_id (%d)", pcc_state->id);
 }
 
 uint32_t backoff_delay(uint32_t max, uint32_t base, uint32_t retry_count)

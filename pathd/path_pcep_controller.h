@@ -75,6 +75,8 @@ struct pcep_ctrl_socket_data {
 typedef int (*pcep_ctrl_thread_callback)(struct thread *);
 
 /* Functions called from the main thread */
+int get_pcc_id_by_ip(struct frr_pthread *fpt, struct ipaddr *pce_ip);
+int pcep_ctrl_get_free_pcc_id(struct frr_pthread *fpt);
 int pcep_ctrl_initialize(struct thread_master *main_thread,
 			 struct frr_pthread **fpt,
 			 pcep_main_event_handler_t event_handler);
